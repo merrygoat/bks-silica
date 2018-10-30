@@ -1,0 +1,1 @@
+mpiexec -np 4 lmp_mpi -in silica.in

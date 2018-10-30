@@ -1,0 +1,86 @@
+## This script first constructs an alpha quartz structure of a given size.
+
+variable		snapshots  equal 1000					# Frequency to output simulation snapshots in untis of timesteps
+variable		cut_off equal 10.0						# Cut-off distance for the Buckingham term (Angstrom in metal units)
+variable		pressure equal 0						# Initial state pressure (bar in metal units)
+variable		temperature equal 6000.0				# Initial state quantum temperature (K in metal units)
+variable		delta_t equal 1.0e-3					# MD timestep length (ps in metal units)
+variable    	lhalf  equal 18./2						# Half box side length
+variable 		runtime equal 1000
+variable 		eqtime equal 1000
+variable 		logfile string LOGS/p${pressure}_temp${temperature}.txt
+
+## This part defines units and atomic information
+#General
+units			metal
+dimension		3
+boundary		p p p
+atom_style		charge
+timestep	    ${delta_t}
+
+#Lattice
+#lattice     fcc 10000.0
+region			  orthobox block -${lhalf} ${lhalf} -${lhalf} ${lhalf} -${lhalf} ${lhalf}  units box 
+create_box		2 orthobox
+create_atoms	1 random 200 1234 orthobox
+create_atoms  2 random 400  4321 orthobox
+
+#Atomic Information
+mass			1 28.085500 # 
+mass			2 15.999400 # 
+set			type 1 charge +2.4 
+set			type 2 charge -1.2
+
+
+## This part implements the BKS pair potential with a cut-off distance for the Buckingham term. Long range Coulomb interactions are evaluated with the pppm method.
+
+#Pair Potentials
+pair_style    hybrid/overlay buck/coul/long ${cut_off} table linear 39901
+pair_coeff    1 1 buck/coul/long 0.0 1.0 0.0                #No interactions between Si atoms
+pair_coeff    1 2 buck/coul/long 18003.757200 0.205205 133.538100
+pair_coeff    2 2 buck/coul/long 1388.773000  0.362319 175.000000         #BKS interaction in PRL 64 1955 (1990)
+pair_modify   shift yes
+pair_coeff    1 2 table potential_SiO2.TPF Si-O ${cut_off}
+pair_coeff    2 2 table potential_SiO2.TPF O-O ${cut_off}           #See the potential file for more information
+
+kspace_style		pppm 1.0e-4
+
+minimize      1e-6 1e-6 10000 10000
+#Neighbor style
+neighbor		3.0 bin
+neigh_modify		check yes every 1 delay 0 page  100000 one 10000
+group       Si  type 1
+group       O   type 2
+
+variable    massSi      equal mass(Si)
+variable    massO       equal mass(O)
+variable    NAvogadro   equal 6.022140857*1e23
+variable    nSi         equal count(Si)
+variable    nO          equal count(O)
+variable    nmoles      equal 1./v_NAvogadro
+variable	p_damp      equal ${delta_t}*1000								
+variable    t_damp      equal ${delta_t}*1000
+variable    eVtoMJ      equal 1.60218e-25
+variable    ang3tocm3   equal 1e-24
+variable    eMJmol      equal etotal*${eVtoMJ}/(${nSi}+${nO})*${NAvogadro}
+variable    epotmol     equal pe*${eVtoMJ}/(${nSi}+${nO})*${NAvogadro}
+variable    volcm3mol   equal vol*${ang3tocm3}/(${nSi}+${nO})*${NAvogadro}
+
+print ":: The total Si mass is  ${massSi}"
+print ":: Number of Si is ${nSi} and the number of O is ${nO}" 
+
+velocity  all create ${temperature} 123
+fix			thermostat all npt temp ${temperature} ${temperature} ${t_damp} iso ${pressure} ${pressure} ${p_damp}	# thermostat
+
+thermo_style		custom step temp etotal press density lx vol v_volcm3mol  v_eMJmol v_epotmol
+thermo  ${snapshots}	
+
+# Equilibration
+run ${eqtime}
+
+# Production
+reset_timestep 0
+dump 			Dumper all atom ${snapshots} p${pressure}_T${temperature}.dump
+dump_modify		Dumper sort id scale no  first yes
+
+run				${runtime}
