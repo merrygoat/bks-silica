@@ -8,7 +8,7 @@ variable		delta_t equal 1.0e-3					# MD timestep length (ps in metal units)
 variable    	lhalf  equal 18./2						# Half box side length
 variable 		runtime equal 1000
 variable 		eqtime equal 1000
-variable 		logfile string LOGS/p${pressure}_temp${temperature}.txt
+variable		num_particles equal 900
 
 ## This part defines units and atomic information
 #General
@@ -19,11 +19,12 @@ atom_style		charge
 timestep	    ${delta_t}
 
 #Lattice
-#lattice     fcc 10000.0
+variable		num_silicon equal ${num_particles}/3
+variable		num_oxygen equal ${num_particles}/3*2
 region			  orthobox block -${lhalf} ${lhalf} -${lhalf} ${lhalf} -${lhalf} ${lhalf}  units box 
 create_box		2 orthobox
-create_atoms	1 random 200 1234 orthobox
-create_atoms  2 random 400  4321 orthobox
+create_atoms	1 random ${num_silicon} 1234 orthobox
+create_atoms  2 random ${num_oxygen}  4321 orthobox
 
 #Atomic Information
 mass			1 28.085500 # 
