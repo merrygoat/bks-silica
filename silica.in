@@ -1,16 +1,16 @@
 ## This script first constructs an alpha quartz structure of a given size.
 
-variable		num_dump_frames equal 1000
+variable		num_dump_frames equal 100
 variable		num_particles equal 300
 variable		pressure equal 0						# Initial state pressure (bar in metal units)
 variable		temperature equal 6000.0				# Initial state quantum temperature (K in metal units)
-variable 		runtime equal 100000
-variable 		eqtime equal 1
+variable 		runtime equal 1000
+variable 		eqtime equal 20000
 
 
 variable		number_density equal 0.1
 variable		cut_off equal 10.0						# Cut-off distance for the Buckingham term (Angstrom in metal units)
-variable		snapshots  equal runtime/num_dump_frames					# Frequency to output simulation snapshots in untis of timesteps
+variable		snapshots  equal ${runtime}/${num_dump_frames}					# Frequency to output simulation snapshots in untis of timesteps
 variable		delta_t equal 1.0e-3					# MD timestep length (ps in metal units)
 
 ## This part defines units and atomic information
