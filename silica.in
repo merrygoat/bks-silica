@@ -1,14 +1,17 @@
 ## This script first constructs an alpha quartz structure of a given size.
 
-variable		snapshots  equal 1000					# Frequency to output simulation snapshots in untis of timesteps
-variable		cut_off equal 10.0						# Cut-off distance for the Buckingham term (Angstrom in metal units)
+variable		num_dump_frames equal 1000
+variable		num_particles equal 300
 variable		pressure equal 0						# Initial state pressure (bar in metal units)
 variable		temperature equal 6000.0				# Initial state quantum temperature (K in metal units)
+variable 		runtime equal 100000
+variable 		eqtime equal 1
+
+
+variable		number_density equal 0.1
+variable		cut_off equal 10.0						# Cut-off distance for the Buckingham term (Angstrom in metal units)
+variable		snapshots  equal runtime/num_dump_frames					# Frequency to output simulation snapshots in untis of timesteps
 variable		delta_t equal 1.0e-3					# MD timestep length (ps in metal units)
-variable    	lhalf  equal 18./2						# Half box side length
-variable 		runtime equal 1000
-variable 		eqtime equal 1000
-variable		num_particles equal 900
 
 ## This part defines units and atomic information
 #General
@@ -19,6 +22,7 @@ atom_style		charge
 timestep	    ${delta_t}
 
 #Lattice
+variable		lhalf equal ((${num_particles}/${number_density})^(1/3))/2
 variable		num_silicon equal ${num_particles}/3
 variable		num_oxygen equal ${num_particles}/3*2
 region			  orthobox block -${lhalf} ${lhalf} -${lhalf} ${lhalf} -${lhalf} ${lhalf}  units box 
@@ -75,6 +79,14 @@ fix			thermostat all npt temp ${temperature} ${temperature} ${t_damp} iso ${pres
 
 thermo_style		custom step temp etotal press density lx vol v_volcm3mol  v_eMJmol v_epotmol
 thermo  ${snapshots}	
+
+variable varstep equal step
+variable vartemp equal temp
+variable varpress equal press
+variable varetotal equal etotal
+variable varlx equal lx
+
+fix thermo_print all print ${snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file silica_p${pressure}_t${temperature}.thermo
 
 # Equilibration
 run ${eqtime}
