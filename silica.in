@@ -3,14 +3,15 @@
 variable		num_dump_frames equal 100
 variable		num_particles equal 300
 variable		pressure equal 0						# Initial state pressure (bar in metal units)
-variable		temperature equal 6000.0				# Initial state quantum temperature (K in metal units)
-variable 		runtime equal 1000
-variable 		eqtime equal 20000
+variable		temperature equal 1000.0				# Initial state quantum temperature (K in metal units)
+variable 		equilibration_steps equal 20000
+variable 		production_steps equal 1000
 
 
 variable		number_density equal 0.1
 variable		cut_off equal 10.0						# Cut-off distance for the Buckingham term (Angstrom in metal units)
-variable		snapshots  equal ${runtime}/${num_dump_frames}					# Frequency to output simulation snapshots in untis of timesteps
+variable		equilibration_snapshots  equal ${equilibration_steps}/${num_dump_frames}					# Frequency to output simulation snapshots in untis of timesteps
+variable		production_snapshots	equal ${production_steps}/${num_dump_frames}
 variable		delta_t equal 1.0e-3					# MD timestep length (ps in metal units)
 
 ## This part defines units and atomic information
@@ -25,35 +26,35 @@ timestep	    ${delta_t}
 variable		lhalf equal ((${num_particles}/${number_density})^(1/3))/2
 variable		num_silicon equal ${num_particles}/3
 variable		num_oxygen equal ${num_particles}/3*2
-region			  orthobox block -${lhalf} ${lhalf} -${lhalf} ${lhalf} -${lhalf} ${lhalf}  units box 
+region			orthobox block -${lhalf} ${lhalf} -${lhalf} ${lhalf} -${lhalf} ${lhalf}  units box 
 create_box		2 orthobox
 create_atoms	1 random ${num_silicon} 1234 orthobox
-create_atoms  2 random ${num_oxygen}  4321 orthobox
+create_atoms    2 random ${num_oxygen}  4321 orthobox
 
 #Atomic Information
 mass			1 28.085500 # 
 mass			2 15.999400 # 
-set			type 1 charge +2.4 
-set			type 2 charge -1.2
+set			    type 1 charge +2.4 
+set			    type 2 charge -1.2
 
 
 ## This part implements the BKS pair potential with a cut-off distance for the Buckingham term. Long range Coulomb interactions are evaluated with the pppm method.
 
 #Pair Potentials
-pair_style    hybrid/overlay buck/coul/long ${cut_off} table linear 39901
-pair_coeff    1 1 buck/coul/long 0.0 1.0 0.0                #No interactions between Si atoms
-pair_coeff    1 2 buck/coul/long 18003.757200 0.205205 133.538100
-pair_coeff    2 2 buck/coul/long 1388.773000  0.362319 175.000000         #BKS interaction in PRL 64 1955 (1990)
-pair_modify   shift yes
-pair_coeff    1 2 table potential_SiO2.TPF Si-O ${cut_off}
-pair_coeff    2 2 table potential_SiO2.TPF O-O ${cut_off}           #See the potential file for more information
+pair_style    	hybrid/overlay buck/coul/long ${cut_off} table linear 39901
+pair_coeff    	1 1 buck/coul/long 0.0 1.0 0.0                #No interactions between Si atoms
+pair_coeff   	1 2 buck/coul/long 18003.757200 0.205205 133.538100
+pair_coeff    	2 2 buck/coul/long 1388.773000  0.362319 175.000000         #BKS interaction in PRL 64 1955 (1990)
+pair_modify   	shift yes
+pair_coeff    	1 2 table potential_SiO2.TPF Si-O ${cut_off}
+pair_coeff    	2 2 table potential_SiO2.TPF O-O ${cut_off}           #See the potential file for more information
 
-kspace_style		pppm 1.0e-4
+kspace_style	pppm 1.0e-4
 
-minimize      1e-6 1e-6 10000 10000
+minimize      	1e-6 1e-6 10000 10000
 #Neighbor style
 neighbor		3.0 bin
-neigh_modify		check yes every 1 delay 0 page  100000 one 10000
+neigh_modify	check yes every 1 delay 0 page  100000 one 10000
 group       Si  type 1
 group       O   type 2
 
@@ -74,11 +75,8 @@ variable    volcm3mol   equal vol*${ang3tocm3}/(${nSi}+${nO})*${NAvogadro}
 print ":: The total Si mass is  ${massSi}"
 print ":: Number of Si is ${nSi} and the number of O is ${nO}" 
 
-velocity  all create ${temperature} 123
+velocity  	all create ${temperature} 123
 fix			thermostat all npt temp ${temperature} ${temperature} ${t_damp} iso ${pressure} ${pressure} ${p_damp}	# thermostat
-
-thermo_style		custom step temp etotal press density lx vol v_volcm3mol  v_eMJmol v_epotmol
-thermo  ${snapshots}	
 
 variable varstep equal step
 variable vartemp equal temp
@@ -86,14 +84,21 @@ variable varpress equal press
 variable varetotal equal etotal
 variable varlx equal lx
 
-fix thermo_print all print ${snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file silica_p${pressure}_t${temperature}.thermo
+fix thermo_print 	all print ${equilibration_snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file equilibration_p${pressure}_t${temperature}.thermo
+thermo_style		custom step temp etotal press density lx vol v_volcm3mol  v_eMJmol v_epotmol
+thermo  ${equilibration_snapshots}	
 
 # Equilibration
-run ${eqtime}
+run ${equilibration_steps}
+
+unfix thermo_print
+fix thermo_print 	all print ${production_snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file equilibration_p${pressure}_t${temperature}.thermo
+thermo_style		custom step temp etotal press density lx vol v_volcm3mol  v_eMJmol v_epotmol
+thermo  ${production_snapshots}	
 
 # Production
-reset_timestep 0
-dump 			Dumper all atom ${snapshots} p${pressure}_T${temperature}.dump
+reset_timestep 	0
+dump 			Dumper all atom ${production_snapshots} p${pressure}_T${temperature}.dump
 dump_modify		Dumper sort id scale no  first yes
 
-run				${runtime}
+run				${production_steps}

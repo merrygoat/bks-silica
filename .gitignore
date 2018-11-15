@@ -2,3 +2,6 @@
 log.lammps
 *.dump
 .idea/
+*.thermo
+*.xyz
+*.atom
