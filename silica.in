@@ -92,7 +92,7 @@ thermo  ${equilibration_snapshots}
 run ${equilibration_steps}
 
 unfix thermo_print
-fix thermo_print 	all print ${production_snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file equilibration_p${pressure}_t${temperature}.thermo
+fix thermo_print 	all print ${production_snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file production_p${pressure}_t${temperature}.thermo
 thermo_style		custom step temp etotal press density lx vol v_volcm3mol  v_eMJmol v_epotmol
 thermo  ${production_snapshots}	
 
