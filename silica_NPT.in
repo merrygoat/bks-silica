@@ -1,0 +1,99 @@
+## Script to run BKS silica in the NPT ensemble
+
+variable		num_dump_frames equal 100
+variable		num_particles equal 300
+variable		temperature equal 1000.0			# Initial state quantum temperature (K in metal units)
+variable 		equilibration_steps equal 1000
+variable 		production_steps equal 1000
+variable		pressure	equal 0					# The pressure maintained by the NVT thermostat
+
+variable		cut_off equal 10.0					# Cut-off distance for the Buckingham term (Angstrom in metal units)
+variable		equilibration_snapshots  equal ${equilibration_steps}/${num_dump_frames}		# Frequency to output simulation snapshots
+variable		production_snapshots	equal ${production_steps}/${num_dump_frames}
+
+## This part defines units and atomic information
+#General
+units			metal
+atom_style		charge
+timestep	    1e-3
+
+#Lattice
+variable		lhalf equal ((${num_particles}/0.1)^(1/3))/2	# Aim for number density 0.1 at the begining.
+region			orthobox block -${lhalf} ${lhalf} -${lhalf} ${lhalf} -${lhalf} ${lhalf}  units box 
+variable		num_silicon equal ${num_particles}/3
+variable 		num_oxygen equal ${num_particles}/3*2
+
+create_box		2 orthobox
+create_atoms	1 random ${num_silicon}  1234 orthobox
+create_atoms    2 random ${num_oxygen}   4321 orthobox
+
+#Atomic Information
+mass			1 28.085500  
+mass			2 15.999400  
+set			    type 1 charge +2.4 
+set			    type 2 charge -1.2
+
+
+## This part implements the BKS pair potential with a cut-off distance for the Buckingham term. Long range Coulomb interactions are evaluated with the pppm method.
+
+#Pair Potentials
+pair_style    	hybrid/overlay buck/coul/long ${cut_off} table linear 39901
+pair_coeff    	1 1 buck/coul/long 0.0 1.0 0.0                #No interactions between Si atoms
+pair_coeff   	1 2 buck/coul/long 18003.757200 0.205205 133.538100
+pair_coeff    	2 2 buck/coul/long 1388.773000  0.362319 175.000000         #BKS interaction in PRL 64 1955 (1990)
+pair_modify   	shift yes
+pair_coeff    	1 2 table potential_SiO2.TPF Si-O ${cut_off}
+pair_coeff    	2 2 table potential_SiO2.TPF O-O ${cut_off}           #See the potential file for more information
+
+kspace_style	pppm 1.0e-4
+
+
+#Neighbor style
+neighbor		3.0 bin
+neigh_modify	check yes every 1 delay 0 page  100000 one 10000
+group      		Si  type 1
+group       	O   type 2
+
+variable  	  	NAvogadro   equal 6.022140857*1e23
+variable		nSi         equal count(Si)
+variable    	nO          equal count(O)
+variable    	nmoles      equal 1./v_NAvogadro
+variable    	eVtoMJ      equal 1.60218e-25
+variable    	ang3tocm3   equal 1e-24
+variable    	eMJmol      equal etotal*${eVtoMJ}/(${nSi}+${nO})*${NAvogadro}
+variable    	epotmol     equal pe*${eVtoMJ}/(${nSi}+${nO})*${NAvogadro}
+variable    	volcm3mol   equal vol*${ang3tocm3}/(${nSi}+${nO})*${NAvogadro}
+
+velocity  		all create ${temperature} 123
+fix				thermostat all npt temp ${temperature} ${temperature} 1	iso ${pressure} ${pressure} 1 # thermostat
+
+variable 		varstep equal step
+variable 		vartemp equal temp
+variable 		varpress equal press
+variable 		varetotal equal etotal
+variable 		varlx equal lx
+
+# initial energy minimisation to prevent particle overlap of random particles.
+minimize      	1e-6 1e-6 10000 10000
+reset_timestep 	0
+
+# Set up equilibration thermo outputs
+fix 			equilibration_print all print ${equilibration_snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file equilibration_p${pressure}_t${temperature}.thermo screen no
+thermo  		${equilibration_snapshots}
+thermo_style	custom step temp etotal press density lx
+
+# Do the equilibration
+run 			${equilibration_steps}
+
+# Set up production thermo outputs
+unfix 			equilibration_print
+fix 			production_print all print ${production_snapshots} "${varstep} ${vartemp} ${varpress} ${varetotal} ${varlx}" file production_p${pressure}_t${temperature}.thermo screen no
+thermo  		${production_snapshots}	
+thermo_style	custom step temp etotal press density lx
+
+# Production
+reset_timestep 	0
+dump 			production_dump all atom ${production_snapshots} p${pressure}_T${temperature}.dump
+dump_modify		production_dump sort id scale no first yes
+
+run				${production_steps}
